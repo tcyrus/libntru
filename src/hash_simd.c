@@ -1,5 +1,8 @@
 #include <string.h>
 #include <stdint.h>
+#ifdef __ARM_NEON__
+#include <arm_neon.h>
+#endif
 #ifdef __SSSE3__
 #include <tmmintrin.h>
 #endif
@@ -38,6 +41,39 @@ extern void sha1_multi_block(SHA1_MB_CTX *, HASH_DESC *, int num);
 
 extern void sha256_multi_block(SHA256_MB_CTX *, HASH_DESC *, int num);
 
+#ifdef __ARM_NEON__
+void SHA1_MB_Init(SHA1_MB_CTX *ctx) {
+    memset(ctx, 0, sizeof(*ctx));
+    uint32x4_t a = vdupq_n_u32(0x67452301);
+    uint32x4_t b = vdupq_n_u32(0xefcdab89);
+    uint32x4_t c = vdupq_n_u32(0x98badcfe);
+    uint32x4_t d = vdupq_n_u32(0x10325476);
+    uint32x4_t e = vdupq_n_u32(0xc3d2e1f0);
+    vst1q_u32(&ctx->A, a);
+    vst1q_u32(&ctx->B, b);
+    vst1q_u32(&ctx->C, c);
+    vst1q_u32(&ctx->D, d);
+    vst1q_u32(&ctx->E, e);
+}
+
+void SHA1_MB_Init8(SHA1_MB_CTX *ctx) {
+    /* init A[0]..A[3], B[0]..B[3], ... */
+    SHA1_MB_Init(ctx);
+    /* init A[4]..A[7], B[4]..B[7], ... */
+    uint32x4_t a = vdupq_n_u32(0x67452301);
+    uint32x4_t b = vdupq_n_u32(0xefcdab89);
+    uint32x4_t c = vdupq_n_u32(0x98badcfe);
+    uint32x4_t d = vdupq_n_u32(0x10325476);
+    uint32x4_t e = vdupq_n_u32(0xc3d2e1f0);
+    vst1q_u32(&ctx->A[4], a);
+    vst1q_u32(&ctx->B[4], b);
+    vst1q_u32(&ctx->C[4], c);
+    vst1q_u32(&ctx->D[4], d);
+    vst1q_u32(&ctx->E[4], e);
+}
+#endif
+
+#ifdef __SSSE3__
 void SHA1_MB_Init(SHA1_MB_CTX *ctx) {
     memset(ctx, 0, sizeof(*ctx));
     __m128i a = _mm_set1_epi32(0x67452301);
@@ -67,6 +103,7 @@ void SHA1_MB_Init8(SHA1_MB_CTX *ctx) {
     _mm_storeu_si128((__m128i*)&ctx->D[4], d);
     _mm_storeu_si128((__m128i*)&ctx->E[4], e);
 }
+#endif
 
 void SHA1_MB_Update(SHA1_MB_CTX *ctx, uint8_t *data[4], size_t len) {
     if (len == 0)
@@ -266,6 +303,51 @@ void ntru_sha1_8way_simd(uint8_t *input[8], uint16_t input_len, uint8_t *digest[
     SHA1_MB_Final8(digest, &ctx);
 }
 
+#ifdef __ARM_NEON__
+void SHA256_MB_Init(SHA256_MB_CTX *ctx) {
+    memset(ctx, 0, sizeof(*ctx));
+    uint32x4_t a = vdupq_n_u32(0x6a09e667);
+    uint32x4_t b = vdupq_n_u32(0xbb67ae85);
+    uint32x4_t c = vdupq_n_u32(0x3c6ef372);
+    uint32x4_t d = vdupq_n_u32(0xa54ff53a);
+    uint32x4_t e = vdupq_n_u32(0x510e527f);
+    uint32x4_t f = vdupq_n_u32(0x9b05688c);
+    uint32x4_t g = vdupq_n_u32(0x1f83d9ab);
+    uint32x4_t h = vdupq_n_u32(0x5be0cd19);
+    vst1q_s32((int32_t*)&ctx->A, a);
+    vst1q_s32((int32_t*)&ctx->B, b);
+    vst1q_s32((int32_t*)&ctx->C, c);
+    vst1q_s32((int32_t*)&ctx->D, d);
+    vst1q_s32((int32_t*)&ctx->E, e);
+    vst1q_s32((int32_t*)&ctx->F, f);
+    vst1q_s32((int32_t*)&ctx->G, g);
+    vst1q_s32((int32_t*)&ctx->H, h);
+}
+
+void SHA256_MB_Init8(SHA256_MB_CTX *ctx) {
+    /* init A[0]..A[3], B[0]..B[3], ... */
+    SHA256_MB_Init(ctx);
+    /* init A[4]..A[7], B[4]..B[7], ... */
+    uint32x4_t a = vdupq_n_u32(0x6a09e667);
+    uint32x4_t b = vdupq_n_u32(0xbb67ae85);
+    uint32x4_t c = vdupq_n_u32(0x3c6ef372);
+    uint32x4_t d = vdupq_n_u32(0xa54ff53a);
+    uint32x4_t e = vdupq_n_u32(0x510e527f);
+    uint32x4_t f = vdupq_n_u32(0x9b05688c);
+    uint32x4_t g = vdupq_n_u32(0x1f83d9ab);
+    uint32x4_t h = vdupq_n_u32(0x5be0cd19);
+    vst1q_s32((int32_t*)&ctx->A[4], a);
+    vst1q_s32((int32_t*)&ctx->B[4], b);
+    vst1q_s32((int32_t*)&ctx->C[4], c);
+    vst1q_s32((int32_t*)&ctx->D[4], d);
+    vst1q_s32((int32_t*)&ctx->E[4], e);
+    vst1q_s32((int32_t*)&ctx->F[4], f);
+    vst1q_s32((int32_t*)&ctx->G[4], g);
+    vst1q_s32((int32_t*)&ctx->H[4], h);
+}
+#endif
+
+#ifdef __SSSE3__
 void SHA256_MB_Init(SHA256_MB_CTX *ctx) {
     memset(ctx, 0, sizeof(*ctx));
     __m128i a = _mm_set1_epi32(0x6a09e667);
@@ -307,6 +389,7 @@ void SHA256_MB_Init8(SHA256_MB_CTX *ctx) {
     _mm_storeu_si128((__m128i*)&ctx->G[4], g);
     _mm_storeu_si128((__m128i*)&ctx->H[4], h);
 }
+#endif
 
 void SHA256_MB_Update(SHA256_MB_CTX *ctx, uint8_t *data[4], size_t len) {
     if (len == 0)
