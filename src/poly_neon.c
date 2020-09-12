@@ -154,21 +154,21 @@ uint8_t ntru_mult_tern_neon_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
         uint8_t num_bytes0 = 16 - (((size_t)&c_coeffs[k])%16);
         uint8_t num_coeffs0 = num_bytes0 / 2;   /* c_coeffs[k+num_coeffs0] is 16-byte aligned */
         k -= 8 - num_coeffs0;
-        int16x8_t *ck = (int16x8_t*)&c_coeffs[k];
+        int16x8_t ck = vld1q_s16((const int16_t*)&c_coeffs[k]);
         int16x8_t aj = (int16x8_t)a_coeffs0[8-num_coeffs0];
-        int16x8_t ca = vaddq_s16(*ck, aj);
-        vst1q_s16((int16_t*)ck, ca);
+        int16x8_t ca = vaddq_s16(ck, aj);
+        vst1q_s16(&c_coeffs[k], ca);
         k += 8;
         /* process the remaining coefficients in blocks of 8. */
         /* it is safe not to truncate the last block of 8 coefficients */
         /* because there is extra room at the end of the coeffs array  */
-        ck = (int16x8_t*)&c_coeffs[k];
+        ck = vld1q_s16((const int16_t*)&c_coeffs[k]);
         int16_t j;
         for (j=num_coeffs0; j<N; j+=8,k+=8) {
             int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
-            int16x8_t ca = vaddq_s16(*ck, aj);
-            vst1q_s16((int16_t*)ck, ca);
-            ck++;
+            int16x8_t ca = vaddq_s16(ck, aj);
+            vst1q_s16(&c_coeffs[k], ca);
+            ck++; // TODO: ???
         }
     }
 
@@ -179,21 +179,21 @@ uint8_t ntru_mult_tern_neon_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
         uint8_t num_bytes0 = 16 - (((size_t)&c_coeffs[k])%16);
         uint8_t num_coeffs0 = num_bytes0 / 2;   /* c_coeffs[k+num_coeffs0] is 16-byte aligned */
         k -= 8 - num_coeffs0;
-        int16x8_t *ck = (int16x8_t*)&c_coeffs[k];
-        int16x8_t aj = (int16x8_t)a_coeffs0[8-num_coeffs0];
-        int16x8_t ca = vsubq_s16(*ck, aj);
-        vst1q_s16((int16_t*)ck, ca);
+        int16x8_t ck = vld1q_s16((const int16_t*)&c_coeffs[k]);
+        int16x8_t aj = vld1q_s16(&a_coeffs0[8-num_coeffs0]);
+        int16x8_t ca = vsubq_s16(ck, aj);
+        vst1q_s16(&c_coeffs[k], ca);
         k += 8;
         /* process the remaining coefficients in blocks of 8. */
         /* it is safe not to truncate the last block of 8 coefficients */
         /* because there is extra room at the end of the coeffs array  */
-        ck = (__m128i*)&c_coeffs[k];
+        ck = vld1q_s16((const int16_t*)&c_coeffs[k]);
         int16_t j;
         for (j=num_coeffs0; j<N; j+=8,k+=8) {
             int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
             int16x8_t ca = vsubq_s16(*ck, aj);
-            vst1q_s16((int16_t*)ck, ca);
-            ck++;
+            vst1q_s16(&c_coeffs[k], ca);
+            ck++; // TODO: ???
         }
     }
 
@@ -209,7 +209,7 @@ uint8_t ntru_mult_tern_neon_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
         int16x8_t c128_0 = vaddq_s16(*ci, c128_1);
         c128_0 = vandq_s16(c128_0, mod_mask_128);
         vst1q_s16((int16_t*)&c->coeffs[i], c128_0);
-        ci++;
+        ci++; // TODO: ???
     }
 
     return 1;
