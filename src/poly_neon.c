@@ -20,8 +20,8 @@ uint8_t ntru_mult_int_neon(NtruIntPoly *a, NtruIntPoly *b, NtruIntPoly *c, uint1
         a->coeffs[k] = 0;
         b->coeffs[k] = 0;
     }
-    
-    int8x16_t zero128 = vdupq_n_s8(0);
+
+    int16x8_t zero128 = vdupq_n_s16(0);
     
     for (k=0; k<N; k+=8) {
         uint8_t j;
@@ -66,7 +66,7 @@ uint8_t ntru_mult_int_neon(NtruIntPoly *a, NtruIntPoly *b, NtruIntPoly *c, uint1
 }
 
 /* Optimized for small df */
-uint8_t ntru_mult_tern_sse_sparse(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uint16_t mod_mask) {
+uint8_t ntru_mult_tern_neon_sparse(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uint16_t mod_mask) {
     uint16_t N = a->N;
     if (N != b->N)
         return 0;
@@ -82,17 +82,17 @@ uint8_t ntru_mult_tern_sse_sparse(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
         /* it is safe not to truncate the last block of 8 coefficients */
         /* because there is extra room at the end of the coeffs array  */
         for (j=0; j<j_end; j+=8,k+=8) {
-            __m128i ck = _mm_lddqu_si128((__m128i*)&c->coeffs[k]);
-            __m128i aj = _mm_lddqu_si128((__m128i*)&a->coeffs[j]);
-            __m128i ca = _mm_add_epi16(ck, aj);
-            _mm_storeu_si128((__m128i*)&c->coeffs[k], ca);
+            int16x8_t ck = vld1q_s16((const int16_t*)&c->coeffs[k]);
+            int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
+            int16x8_t ca = vaddq_s16(ck, aj);
+            vst1q_s16((int16_t*)&c->coeffs[k], ca);
         }
         j = j_end;
         for (k=0; j<N-7; j+=8,k+=8) {
-            __m128i ck = _mm_lddqu_si128((__m128i*)&c->coeffs[k]);
-            __m128i aj = _mm_lddqu_si128((__m128i*)&a->coeffs[j]);
-            __m128i ca = _mm_add_epi16(ck, aj);
-            _mm_storeu_si128((__m128i*)&c->coeffs[k], ca);
+            int16x8_t ck = vld1q_s16((const int16_t*)&c->coeffs[k]);
+            int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
+            int16x8_t ca = vaddq_s16(ck, aj);
+            vst1q_s16((int16_t*)&c->coeffs[k], ca);
         }
         for (; j<N; j++,k++)
             c->coeffs[k] += a->coeffs[j];
@@ -106,28 +106,28 @@ uint8_t ntru_mult_tern_sse_sparse(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
         /* it is safe not to truncate the last block of 8 coefficients */
         /* because there is extra room at the end of the coeffs array  */
         for (j=0; j<j_end; j+=8,k+=8) {
-            __m128i ck = _mm_lddqu_si128((__m128i*)&c->coeffs[k]);
-            __m128i aj = _mm_lddqu_si128((__m128i*)&a->coeffs[j]);
-            __m128i ca = _mm_sub_epi16(ck, aj);
-            _mm_storeu_si128((__m128i*)&c->coeffs[k], ca);
+            int16x8_t ck = vld1q_s16((const int16_t*)&c->coeffs[k]);
+            int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
+            int16x8_t ca = vsubq_s16(ck, aj);
+            vst1q_s16((int16_t*)&c->coeffs[k], ca);
         }
         j = j_end;
         for (k=0; j<N-7; j+=8,k+=8) {
-            __m128i ck = _mm_lddqu_si128((__m128i*)&c->coeffs[k]);
-            __m128i aj = _mm_lddqu_si128((__m128i*)&a->coeffs[j]);
-            __m128i ca = _mm_sub_epi16(ck, aj);
-            _mm_storeu_si128((__m128i*)&c->coeffs[k], ca);
+            int16x8_t ck = vld1q_s16((const int16_t*)&c->coeffs[k]);
+            int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
+            int16x8_t ca = vsubq_s16(ck, aj);
+            vst1q_s16((int16_t*)&c->coeffs[k], ca);
         }
         for (; j<N; j++,k++)
             c->coeffs[k] -= a->coeffs[j];
     }
 
-    ntru_mod_sse(c, mod_mask);
+    ntru_mod_neon(c, mod_mask);
     return 1;
 }
 
 /* Optimized for large df */
-uint8_t ntru_mult_tern_sse_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uint16_t mod_mask) {
+uint8_t ntru_mult_tern_neon_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uint16_t mod_mask) {
     uint16_t N = a->N;
     if (N != b->N)
         return 0;
@@ -140,10 +140,12 @@ uint8_t ntru_mult_tern_sse_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c
     int16_t *c_coeffs = c_coeffs_arr + 8;
     memset(&c_coeffs_arr, 0, sizeof(c_coeffs_arr));
 
-    __m128i a_coeffs0[8];
-    a_coeffs0[0] = _mm_lddqu_si128((__m128i*)&a->coeffs[0]);
+    int16x8_t zero128 = vdupq_n_s16(0);
+
+    int16x8_t a_coeffs0[8];
+    a_coeffs0[0] = vld1q_s16((const int16_t*)&a->coeffs[0]);
     for (i=1; i<8; i++)
-        a_coeffs0[i] = _mm_slli_si128(a_coeffs0[i-1], 2);
+        a_coeffs0[i] = vextq_s16(zero128, a_coeffs0[i-1], 8 - 1);
 
     /* add coefficients that are multiplied by 1 */
     for (i=0; i<b->num_ones; i++) {
@@ -152,20 +154,20 @@ uint8_t ntru_mult_tern_sse_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c
         uint8_t num_bytes0 = 16 - (((size_t)&c_coeffs[k])%16);
         uint8_t num_coeffs0 = num_bytes0 / 2;   /* c_coeffs[k+num_coeffs0] is 16-byte aligned */
         k -= 8 - num_coeffs0;
-        __m128i *ck = (__m128i*)&c_coeffs[k];
-        __m128i aj = a_coeffs0[8-num_coeffs0];
-        __m128i ca = _mm_add_epi16(*ck, aj);
-        _mm_store_si128(ck, ca);
+        int16x8_t *ck = (int16x8_t*)&c_coeffs[k];
+        int16x8_t aj = (int16x8_t)a_coeffs0[8-num_coeffs0];
+        int16x8_t ca = vaddq_s16(*ck, aj);
+        vst1q_s16((int16_t*)ck, ca);
         k += 8;
         /* process the remaining coefficients in blocks of 8. */
         /* it is safe not to truncate the last block of 8 coefficients */
         /* because there is extra room at the end of the coeffs array  */
-        ck = (__m128i*)&c_coeffs[k];
+        ck = (int16x8_t*)&c_coeffs[k];
         int16_t j;
         for (j=num_coeffs0; j<N; j+=8,k+=8) {
-            __m128i aj = _mm_lddqu_si128((__m128i*)&a->coeffs[j]);
-            __m128i ca = _mm_add_epi16(*ck, aj);
-            _mm_store_si128(ck, ca);
+            int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
+            int16x8_t ca = vaddq_s16(*ck, aj);
+            vst1q_s16((int16_t*)ck, ca);
             ck++;
         }
     }
@@ -177,10 +179,10 @@ uint8_t ntru_mult_tern_sse_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c
         uint8_t num_bytes0 = 16 - (((size_t)&c_coeffs[k])%16);
         uint8_t num_coeffs0 = num_bytes0 / 2;   /* c_coeffs[k+num_coeffs0] is 16-byte aligned */
         k -= 8 - num_coeffs0;
-        __m128i *ck = (__m128i*)&c_coeffs[k];
-        __m128i aj = a_coeffs0[8-num_coeffs0];
-        __m128i ca = _mm_sub_epi16(*ck, aj);
-        _mm_store_si128(ck, ca);
+        int16x8_t *ck = (int16x8_t*)&c_coeffs[k];
+        int16x8_t aj = (int16x8_t)a_coeffs0[8-num_coeffs0];
+        int16x8_t ca = vsubq_s16(*ck, aj);
+        vst1q_s16((int16_t*)ck, ca);
         k += 8;
         /* process the remaining coefficients in blocks of 8. */
         /* it is safe not to truncate the last block of 8 coefficients */
@@ -188,9 +190,9 @@ uint8_t ntru_mult_tern_sse_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c
         ck = (__m128i*)&c_coeffs[k];
         int16_t j;
         for (j=num_coeffs0; j<N; j+=8,k+=8) {
-            __m128i aj = _mm_lddqu_si128((__m128i*)&a->coeffs[j]);
-            __m128i ca = _mm_sub_epi16(*ck, aj);
-            _mm_store_si128(ck, ca);
+            int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
+            int16x8_t ca = vsubq_s16(*ck, aj);
+            vst1q_s16((int16_t*)ck, ca);
             ck++;
         }
     }
@@ -200,64 +202,66 @@ uint8_t ntru_mult_tern_sse_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c
     for (i=0; ((size_t)&c_coeffs[i])%16; i++)
         c->coeffs[i] = (c_coeffs[i] + c_coeffs[N+i]) & mod_mask;
     /* handle the remaining ones in blocks of 8 */
-    __m128i mod_mask_128 = _mm_set1_epi16(mod_mask);
-    __m128i *ci = (__m128i*)(&c_coeffs[i]);
+    int16x8_t mod_mask_128 = vdupq_n_s16(mod_mask);
+    int16x8_t *ci = (int16x8_t*)(&c_coeffs[i]);
     for (; i<N; i+=8) {
-        __m128i c128_1 = _mm_lddqu_si128((__m128i*)&c_coeffs[i+N]);
-        __m128i c128_0 = _mm_add_epi16(*ci, c128_1);
-        c128_0 = _mm_and_si128(c128_0, mod_mask_128);
-        _mm_storeu_si128((__m128i*)&c->coeffs[i], c128_0);
+        int16x8_t c128_1 = vld1q_s16((const int16_t*)&c_coeffs[i+N]);
+        int16x8_t c128_0 = vaddq_s16(*ci, c128_1);
+        c128_0 = vandq_s16(c128_0, mod_mask_128);
+        vst1q_s16((int16_t*)&c->coeffs[i], c128_0);
         ci++;
     }
 
     return 1;
 }
 
-uint8_t ntru_mult_tern_sse(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uint16_t mod_mask) {
-    if (b->num_ones<NTRU_SPARSE_THRESH_SSSE3 && b->num_neg_ones<NTRU_SPARSE_THRESH_SSSE3)
-        return ntru_mult_tern_sse_sparse(a, b, c, mod_mask);
+uint8_t ntru_mult_tern_neon(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uint16_t mod_mask) {
+    if (b->num_ones < NTRU_SPARSE_THRESH_SSSE3 && b->num_neg_ones < NTRU_SPARSE_THRESH_SSSE3)
+        return ntru_mult_tern_neon_sparse(a, b, c, mod_mask);
     else
-        return ntru_mult_tern_sse_dense(a, b, c, mod_mask);
+        return ntru_mult_tern_neon_dense(a, b, c, mod_mask);
 }
 
-void ntru_to_arr_sse_2048(NtruIntPoly *p, uint8_t *a) {
+void ntru_to_arr_neon_2048(NtruIntPoly *p, uint8_t *a) {
     /* mask{n} masks bits n..n+10 except for mask64 which masks bits 64..66 */
-    __m128i mask0 = {(1<<11)-1, 0};
-    __m128i mask11 = _mm_slli_epi64(mask0, 11);
-    __m128i mask22 = _mm_slli_epi64(mask11, 11);
-    __m128i mask33 = _mm_slli_epi64(mask22, 11);
-    __m128i mask44 = _mm_slli_epi64(mask33, 11);
-    __m128i mask55 = {(uint64_t)((1<<9)-1) << 55, 3};
-    __m128i mask64 = {0, 3};
-    __m128i mask66 = {0, ((1<<11)-1) << 2};
-    __m128i mask77 = _mm_slli_epi64(mask66, 11);
-    __m128i mask88 = _mm_slli_epi64(mask77, 11);
-    __m128i mask99 = _mm_slli_epi64(mask88, 11);
+    int64x2_t mask0 = {(1<<11)-1, 0};
+    int64x2_t mask11 = vshlq_n_i64(mask0, 11);
+    int64x2_t mask22 = vshlq_n_i64(mask11, 11);
+    int64x2_t mask33 = vshlq_n_i64(mask22, 11);
+    int64x2_t mask44 = vshlq_n_i64(mask33, 11);
+    int64x2_t mask55 = {(uint64_t)((1<<9)-1) << 55, 3};
+    int64x2_t mask64 = {0, 3};
+    int64x2_t mask66 = {0, ((1<<11)-1) << 2};
+    int64x2_t mask77 = vshlq_n_i64(mask66, 11);
+    int64x2_t mask88 = vshlq_n_i64(mask77, 11);
+    int64x2_t mask99 = vshlq_n_i64(mask88, 11);
+
+    int64x2_t zero128 = vdupq_n_s64(0);
 
     uint16_t a_idx = 0;
     uint16_t p_idx;
     uint16_t N = p->N;
     for (p_idx=0; p_idx<N-10; p_idx+=8) {
-        __m128i p128 = _mm_lddqu_si128((__m128i*)&p->coeffs[p_idx]);   /* 8 coeffs of p starting at p_idx */
-        __m128i a128 = _mm_and_si128(p128, mask0);                                  /* bits [0..10]    -> [0..10]  */
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_srli_epi64(p128, 5), mask11));       /* [16..26]   -> [11..21] */
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_srli_epi64(p128, 10), mask22));      /* [32..42]   -> [22..32] */
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_srli_epi64(p128, 15), mask33));      /* [48..58]   -> [33..43] */
-        __m128i p128_64 = _mm_srli_si128(p128, 8);
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_slli_epi64(p128_64, 44), mask44));   /* [64..74]   -> [44..54] */
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_slli_epi64(p128_64, 39), mask55));   /* [80..88]   -> [55..63] */
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_srli_epi64(p128, 25), mask64));      /* [89..90]   -> [64..65] */
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_srli_epi64(p128, 30), mask66));      /* [96..111]  -> [66..76] */
-        a128 = _mm_or_si128(a128, _mm_and_si128(_mm_srli_epi64(p128, 35), mask77));      /* [112..127] -> [77..87] */
-        _mm_storeu_si128((__m128i*)&a[a_idx], a128);
+        int64x2_t p128 = vreinterpretq_s64_s16(vld1q_s16(&p->coeffs[p_idx]));       /* 8 coeffs of p starting at p_idx */
+        int64x2_t a128 = vandq_s64(p128, mask0);       /* bits [0..10]    -> [0..10]  */
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128, 5), mask11));       /* [16..26]   -> [11..21] */
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128, 10), mask22));      /* [32..42]   -> [22..32] */
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128, 15), mask33));      /* [48..58]   -> [33..43] */
+        int64x2_t p128_64 = vextq_s64(p128, zero128, 1);
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128_64, 44), mask44));   /* [64..74]   -> [44..54] */
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128_64, 39), mask55));   /* [80..88]   -> [55..63] */
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128, 25), mask64));      /* [89..90]   -> [64..65] */
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128, 30), mask66));      /* [96..111]  -> [66..76] */
+        a128 = vorrq_i64(a128, vandq_i64(vshrq_n_i64(p128, 35), mask77));      /* [112..127] -> [77..87] */
+        vst1q_u8(&a[a_idx], vreinterpretq_u8_i64(a128));
         a_idx += 11;
     }
 
    /* remaining coeffs (up to 10) */
-    __m128i p128 = _mm_lddqu_si128((__m128i*)&p->coeffs[p_idx]);   /* 8 coeffs of p starting at p_idx */
-    __m128i a128 = _mm_setzero_si128();
+    int16x8_t p128 = vld1q_s16((const int16_t*)&p->coeffs[p_idx]);   /* 8 coeffs of p starting at p_idx */
+    int16x8_t a128 = vdupq_n_s16(0);
     if (N-p_idx > 0)
-        a128 = _mm_and_si128(p128, mask0);                                          /* bits [0..10]    -> [0..10]  */
+        a128 = vandq_s16(p128, vreinterpretq_i16_i64(mask0));                                          /* bits [0..10]    -> [0..10]  */
     if (N-p_idx > 1)
         a128 = _mm_or_si128(a128, _mm_and_si128(_mm_srli_epi64(p128, 5), mask11));       /* [16..26]   -> [11..21] */
     if (N-p_idx > 2)
@@ -283,77 +287,77 @@ void ntru_to_arr_sse_2048(NtruIntPoly *p, uint8_t *a) {
     if (N-p_idx > 9)
         a128 = _mm_or_si128(a128, _mm_and_si128(_mm_slli_epi64(p128_64, 19), mask99));  /* [16..31]   -> [99..109] */
     uint8_t a_last[16];
-    _mm_storeu_si128((__m128i*)a_last, a128);
+    vst1q_u8((int16_t*)a_last, vreinterpretq_u8_s16(a128));
     memcpy(&a[a_idx], a_last, ((N-p_idx)*11+7)/8);
 }
 
-void ntru_to_arr_sse(NtruIntPoly *p, uint16_t q, uint8_t *a) {
+void ntru_to_arr_neon(NtruIntPoly *p, uint16_t q, uint8_t *a) {
     if (q == 2048)
-        ntru_to_arr_sse_2048(p, a);
+        ntru_to_arr_neon_2048(p, a);
     else
-        ntru_to_arr_32(p, q, a);
+        ntru_to_neon_32(p, q, a);
 }
 
-void ntru_mod_sse(NtruIntPoly *p, uint16_t mod_mask) {
+void ntru_mod_neon(NtruIntPoly *p, uint16_t mod_mask) {
     uint16_t i;
-    __m128i mod_mask_128 = _mm_set1_epi16(mod_mask);
+    int16x8_t mod_mask_128 = vreinterpretq_s16_u16(vdupq_n_u16(mod_mask));
 
     for (i=0; i<p->N; i+=8) {
-        __m128i a = _mm_lddqu_si128((__m128i*)&p->coeffs[i]);
-        a = _mm_and_si128(a, mod_mask_128);
-        _mm_storeu_si128((__m128i*)&p->coeffs[i], a);
+        int16x8_t a = vld1q_s16((const int16_t*)&p->coeffs[i]);
+        a = vandq_s16(a, mod_mask_128);
+        vst1q_s16(&p->coeffs[i], a);
     }
 }
 
 /* (i%3)+3 for i=0..7 */
-__m128i NTRU_MOD3_LUT = {0x0403050403050403, 0};
+int64x2_t NTRU_MOD3_LUT = {0x0403050403050403, 0};
 
 /**
  * SSE version of ntru_mod3.
  * Based on Douglas W Jones' mod3 function at
  * http://homepage.cs.uiowa.edu/~jones/bcd/mod.shtml.
  */
-void ntru_mod3_sse(NtruIntPoly *p) {
+void ntru_mod3_neon(NtruIntPoly *p) {
     uint16_t i;
     for (i=0; i<(p->N+7)/8*8; i+=8) {
-        __m128i a = _mm_lddqu_si128((__m128i*)&p->coeffs[i]);
+        int16x8_t a = vld1q_s16((const int16_t*)&p->coeffs[i]);
 
         /* make positive */
-        __m128i _3000 = _mm_set1_epi16(3000);
-        a = _mm_add_epi16(a, _3000);
+        int16x8_t _3000 = vdupq_n_s16(3000);
+        a = vaddq_s16(a, _3000);
 
         /* a = (a>>8) + (a&0xFF);  (sum base 2**8 digits) */
-        __m128i a1 = _mm_srli_epi16(a, 8);
-        __m128i mask = _mm_set1_epi16(0x00FF);
-        __m128i a2 = _mm_and_si128(a, mask);
-        a = _mm_add_epi16(a1, a2);
+        int16x8_t a1 = vshrq_n_s16(a, 8);
+        int16x8_t mask = vdupq_n_s16(0x00FF);
+        int16x8_t a2 = vandq_s16(a, mask);
+        a = vaddq_s16(a1, a2);
 
         /* a = (a>>4) + (a&0xF);  (sum base 2**4 digits; worst case 0x3B) */
-        a1 = _mm_srli_epi16(a, 4);
-        mask = _mm_set1_epi16(0x000F);
-        a2 = _mm_and_si128(a, mask);
-        a = _mm_add_epi16(a1, a2);
+        a1 = vshrq_n_s16(a, 4);
+        mask = vdupq_n_s16(0x000F);
+        a2 = vandq_s16(a, mask);
+        a = vaddq_s16(a1, a2);
         /* a = (a>>2) + (a&0x3);  (sum base 2**2 digits; worst case 0x1B) */
-        a1 = _mm_srli_epi16(a, 2);
-        mask = _mm_set1_epi16(0x0003);
-        a2 = _mm_and_si128(a, mask);
-        a = _mm_add_epi16(a1, a2);
+        a1 = vshrq_n_s16(a, 2);
+        mask = vdupq_n_s16(0x0003);
+        a2 = vandq_s16(a, mask);
+        a = vaddq_s16(a1, a2);
 
         /* a = (a>>2) + (a&0x3);  (sum base 2**2 digits; worst case 0x7) */
-        a1 = _mm_srli_epi16(a, 2);
-        mask = _mm_set1_epi16(0x0003);
-        a2 = _mm_and_si128(a, mask);
-        a = _mm_add_epi16(a1, a2);
+        a1 = vshrq_n_s16(a, 2);
+        mask = vdupq_n_s16(0x0003);
+        a2 = vandq_s16(a, mask);
+        a = vaddq_s16(a1, a2);
 
-        __m128i a_mod3 = _mm_shuffle_epi8(NTRU_MOD3_LUT, a);
+        int16x8_t _mod3 = vreinterpretq_s16_s8(vqtbl1q_s8(NTRU_MOD3_LUT, vandq_u8(a, vdupq_n_u8(0x8F))));
         /* _mm_shuffle_epi8 changed bytes 1, 3, 5, ... to non-zero; change them back to zero */
-        mask = _mm_set1_epi16(0x00FF);
-        a_mod3 = _mm_and_si128(a_mod3, mask);
+        mask = vdupq_n_s16(0x00FF);
+        a_mod3 = vandq_s16(a_mod3, mask);
         /* subtract 3 so coefficients are in the 0..2 range */
-        __m128i three = _mm_set1_epi16(0x0003);
-        a_mod3 = _mm_sub_epi16(a_mod3, three);
+        int16x8_t three = vdupq_n_s16(0x0003);
+        a_mod3 = vsubq_s16(a_mod3, three);
 
-        _mm_storeu_si128((__m128i*)&p->coeffs[i], a_mod3);
+        vst1q_s16(&p->coeffs[i], a_mod3);
     }
 }
 
