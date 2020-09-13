@@ -227,9 +227,9 @@ void ntru_to_arr_neon_2048(NtruIntPoly *p, uint8_t *a) {
     int64x2_t mask22 = vshlq_n_i64(mask11, 11);
     int64x2_t mask33 = vshlq_n_i64(mask22, 11);
     int64x2_t mask44 = vshlq_n_i64(mask33, 11);
-    int64x2_T mask64 = vdupq_lane_s64(vcreate_s64(3), 1);
+    int64x2_t mask64 = vdupq_lane_s64(vcreate_s64(3), 1);
     int64x2_t mask55 = vsetq_lane_s64((int64_t)((uint64_t)((1<<9)-1) << 55), mask64, 0);
-    int64x2_T mask66 = vdupq_lane_s64(vcreate_s64(((1<<11)-1) << 2), 1);
+    int64x2_t mask66 = vdupq_lane_s64(vcreate_s64(((1<<11)-1) << 2), 1);
     int64x2_t mask77 = vshlq_n_i64(mask66, 11);
     int64x2_t mask88 = vshlq_n_i64(mask77, 11);
     int64x2_t mask99 = vshlq_n_i64(mask88, 11);
