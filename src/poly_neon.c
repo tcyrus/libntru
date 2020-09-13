@@ -92,7 +92,7 @@ uint8_t ntru_mult_tern_neon_sparse(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly 
             int16x8_t ck = vld1q_s16(&c->coeffs[k]);
             int16x8_t aj = vld1q_s16(&a->coeffs[j]);
             int16x8_t ca = vaddq_s16(ck, aj);
-            vst1q_s16((int16_t*)&c->coeffs[k], ca);
+            vst1q_s16(&c->coeffs[k], ca);
         }
         for (; j<N; j++,k++)
             c->coeffs[k] += a->coeffs[j];
@@ -143,7 +143,7 @@ uint8_t ntru_mult_tern_neon_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
     int16x8_t zero128 = vdupq_n_s16(0);
 
     int16x8_t a_coeffs0[8];
-    a_coeffs0[0] = vld1q_s16((const int16_t*)&a->coeffs[0]);
+    a_coeffs0[0] = vld1q_s16(&a->coeffs[0]);
     for (i=1; i<8; i++)
         a_coeffs0[i] = vextq_s16(zero128, a_coeffs0[i-1], 8 - 1);
 
@@ -151,24 +151,23 @@ uint8_t ntru_mult_tern_neon_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
     for (i=0; i<b->num_ones; i++) {
         int16_t k = b->ones[i];
         /* process the first num_coeffs0 coefficients, 1<=num_coeffs0<=8 */
-        uint8_t num_bytes0 = 16 - (((size_t)&c_coeffs[k])%16);
+        uint8_t num_bytes0 = 16 - (((size_t)&c_coeffs[k]) % 16);
         uint8_t num_coeffs0 = num_bytes0 / 2;   /* c_coeffs[k+num_coeffs0] is 16-byte aligned */
         k -= 8 - num_coeffs0;
         int16x8_t ck = vld1q_s16(&c_coeffs[k]);
-        int16x8_t aj = (int16x8_t)a_coeffs0[8-num_coeffs0];
+        int16x8_t aj = vld1q_s16(&a_coeffs0[8-num_coeffs0]);
         int16x8_t ca = vaddq_s16(ck, aj);
         vst1q_s16(&c_coeffs[k], ca);
         k += 8;
         /* process the remaining coefficients in blocks of 8. */
         /* it is safe not to truncate the last block of 8 coefficients */
         /* because there is extra room at the end of the coeffs array  */
-        ck = vld1q_s16((const int16_t*)&c_coeffs[k]);
         int16_t j;
-        for (j=num_coeffs0; j<N; j+=8,k+=8) {
-            int16x8_t aj = vld1q_s16((const int16_t*)&a->coeffs[j]);
+        for (j=num_coeffs0; j<N; j+=8, k+=8) {
+            ck = vld1q_s16(&c_coeffs[k]);
+            int16x8_t aj = vld1q_s16(&a->coeffs[j]);
             int16x8_t ca = vaddq_s16(ck, aj);
             vst1q_s16(&c_coeffs[k], ca);
-            ck++; // TODO: ???
         }
     }
 
@@ -223,18 +222,14 @@ uint8_t ntru_mult_tern_neon(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uin
 
 void ntru_to_arr_neon_2048(NtruIntPoly *p, uint8_t *a) {
     /* mask{n} masks bits n..n+10 except for mask64 which masks bits 64..66 */
-    int64[2] mask0_ = {(1<<11)-1, 0};
-    int64x2_t mask0 = vld1q_i64(&mask0_);
+    int64x2_t mask0 = vdupq_lane_s64(vcreate_s64((1<<11)-1), 0);
     int64x2_t mask11 = vshlq_n_i64(mask0, 11);
     int64x2_t mask22 = vshlq_n_i64(mask11, 11);
     int64x2_t mask33 = vshlq_n_i64(mask22, 11);
     int64x2_t mask44 = vshlq_n_i64(mask33, 11);
-    int64[2] mask55_ = {(uint64_t)((1<<9)-1) << 55, 3};
-    int64x2_t mask55 = vld1q_i64(&mask55);
-    int64[2] mask64_ = {0, 3};
-    int64x2_t mask64 = vld1q_i64(&mask64_);
-    int64[2] mask66_ = {0, ((1<<11)-1) << 2};
-    int64x2_t mask66 = vld1q_i64(&mask66_);
+    int64x2_T mask64 = vdupq_lane_s64(vcreate_s64(3), 1);
+    int64x2_t mask55 = vsetq_lane_s64((int64_t)((uint64_t)((1<<9)-1) << 55), mask64, 0);
+    int64x2_T mask66 = vdupq_lane_s64(vcreate_s64(((1<<11)-1) << 2), 1);
     int64x2_t mask77 = vshlq_n_i64(mask66, 11);
     int64x2_t mask88 = vshlq_n_i64(mask77, 11);
     int64x2_t mask99 = vshlq_n_i64(mask88, 11);
@@ -306,14 +301,14 @@ void ntru_mod_neon(NtruIntPoly *p, uint16_t mod_mask) {
     int16x8_t mod_mask_128 = vreinterpretq_s16_u16(vdupq_n_u16(mod_mask));
 
     for (i=0; i<p->N; i+=8) {
-        int16x8_t a = vld1q_s16((const int16_t*)&p->coeffs[i]);
+        int16x8_t a = vld1q_s16(&p->coeffs[i]);
         a = vandq_s16(a, mod_mask_128);
         vst1q_s16(&p->coeffs[i], a);
     }
 }
 
 /* (i%3)+3 for i=0..7 */
-int64x2_t NTRU_MOD3_LUT = {0x0403050403050403, 0};
+int16x8_t NTRU_MOD3_LUT = vreinterpretq_s16_s64(vdupq_lane_s64(vcreate_s64(0x0403050403050403), 0));
 
 /**
  * SSE version of ntru_mod3.
@@ -323,7 +318,7 @@ int64x2_t NTRU_MOD3_LUT = {0x0403050403050403, 0};
 void ntru_mod3_neon(NtruIntPoly *p) {
     uint16_t i;
     for (i=0; i<(p->N+7)/8*8; i+=8) {
-        int16x8_t a = vld1q_s16((const int16_t*)&p->coeffs[i]);
+        int16x8_t a = vld1q_s16(&p->coeffs[i]);
 
         /* make positive */
         int16x8_t _3000 = vdupq_n_s16(3000);
@@ -352,7 +347,7 @@ void ntru_mod3_neon(NtruIntPoly *p) {
         a2 = vandq_s16(a, mask);
         a = vaddq_s16(a1, a2);
 
-        int16x8_t _mod3 = vreinterpretq_s16_s8(vqtbl1q_s8(NTRU_MOD3_LUT, vandq_u8(a, vdupq_n_u8(0x8F))));
+        int16x8_t _mod3 = vqtbl1q_s16(NTRU_MOD3_LUT, vreinterpretq_s16_u8(vandq_u8(a, vdupq_n_u8(0x8F))));
         /* _mm_shuffle_epi8 changed bytes 1, 3, 5, ... to non-zero; change them back to zero */
         mask = vdupq_n_s16(0x00FF);
         a_mod3 = vandq_s16(a_mod3, mask);
