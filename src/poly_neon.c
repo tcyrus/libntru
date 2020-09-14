@@ -52,7 +52,7 @@ uint8_t ntru_mult_int_neon(NtruIntPoly *a, NtruIntPoly *b, NtruIntPoly *c, uint1
                 c128 = vaddq_s16(c128, product);
 
                 a128_0 = vextq_s16(zero16x8, a128_0, 7);
-                a128_1 = vextq_s16(a128_1, a128_0, 7);
+                a128_1 = vextq_s16(a128_0, a128_1, 7);
             }
             vst1q_s16(&c_coeffs[k+i], c128);
         }
@@ -145,7 +145,7 @@ uint8_t ntru_mult_tern_neon_dense(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *
     int16x8_t a_coeffs0[8];
     a_coeffs0[0] = vld1q_s16(&a->coeffs[0]);
     for (i=1; i<8; i++)
-        a_coeffs0[i] = vextq_s16(zero128, a_coeffs0[i-1], 8 - 1);
+        a_coeffs0[i] = vextq_s16(zero128, a_coeffs0[i-1], 7);
 
     /* add coefficients that are multiplied by 1 */
     for (i=0; i<b->num_ones; i++) {
@@ -284,6 +284,7 @@ void ntru_to_arr_neon_2048(NtruIntPoly *p, uint8_t *a) {
     }
     if (N-p_idx > 9)
         a128 = vorrq_s64(a128, vandq_s64(vshrq_n_s64(p128_64, 19), mask99));  /* [16..31]   -> [99..109] */
+
     uint8_t a_last[16];
     vst1q_u8(&a_last[0], vreinterpretq_u8_s64(a128));
     memcpy(&a[a_idx], a_last, ((N-p_idx)*11+7)/8);
@@ -308,7 +309,7 @@ void ntru_mod_neon(NtruIntPoly *p, uint16_t mod_mask) {
 }
 
 /* (i%3)+3 for i=0..7 */
-int16x8_t NTRU_MOD3_LUT = vreinterpretq_s16_s64(vdupq_lane_s64(vcreate_s64(0x0403050403050403), 0));
+int16x8_t NTRU_MOD3_LUT = vreinterpretq_s16_u64(vdupq_lane_u64(vcreate_u64(0x0403050403050403), 0));
 
 /**
  * SSE version of ntru_mod3.
