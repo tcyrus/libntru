@@ -222,14 +222,16 @@ uint8_t ntru_mult_tern_neon(NtruIntPoly *a, NtruTernPoly *b, NtruIntPoly *c, uin
 
 void ntru_to_arr_neon_2048(NtruIntPoly *p, uint8_t *a) {
     /* mask{n} masks bits n..n+10 except for mask64 which masks bits 64..66 */
-    int64x2_t mask0 = vdupq_lane_s64(vcreate_s64((1<<11)-1), 0);
+    int64x1_t zero64x1 = vcreate_s64(0);
+    
+    int64x2_t mask0 = vcombine_s64(vcreate_s64((1<<11)-1), zero64x1);
     int64x2_t mask11 = vshlq_n_i64(mask0, 11);
     int64x2_t mask22 = vshlq_n_i64(mask11, 11);
     int64x2_t mask33 = vshlq_n_i64(mask22, 11);
     int64x2_t mask44 = vshlq_n_i64(mask33, 11);
-    int64x2_t mask64 = vdupq_lane_s64(vcreate_s64(3), 1);
-    int64x2_t mask55 = vsetq_lane_s64((int64_t)((uint64_t)((1<<9)-1) << 55), mask64, 0);
-    int64x2_t mask66 = vdupq_lane_s64(vcreate_s64(((1<<11)-1) << 2), 1);
+    int64x2_t mask64 = vcombine_s64(zero64x1, vcreate_s64(3));
+    int64x2_t mask55 = vsetq_lane_s64((uint64_t)((1<<9)-1) << 55, mask64, 0);
+    int64x2_t mask66 = vcombine_s64(zero64x1, vcreate_s64(((1<<11)-1) << 2));
     int64x2_t mask77 = vshlq_n_i64(mask66, 11);
     int64x2_t mask88 = vshlq_n_i64(mask77, 11);
     int64x2_t mask99 = vshlq_n_i64(mask88, 11);
@@ -348,8 +350,9 @@ void ntru_mod3_neon(NtruIntPoly *p) {
         a2 = vandq_s16(a, mask);
         a = vaddq_s16(a1, a2);
 
-        int16x8_t _mod3 = vqtbl1q_s16(NTRU_MOD3_LUT, vreinterpretq_s16_u8(vandq_u8(a, vdupq_n_u8(0x8F))));
-        /* _mm_shuffle_epi8 changed bytes 1, 3, 5, ... to non-zero; change them back to zero */
+        uint8x16_t a_masked = vandq_u8(vreinterpretq_u8_s16(a), vdupq_n_u8(0x8F));
+        int16x8_t _mod3 = vreinterpretq_s16_s8(vqtbl1q_s8(NTRU_MOD3_LUT, a_masked));
+        /* vqtbl1q_s8 changed bytes 1, 3, 5, ... to non-zero; change them back to zero */
         mask = vdupq_n_s16(0x00FF);
         a_mod3 = vandq_s16(a_mod3, mask);
         /* subtract 3 so coefficients are in the 0..2 range */
